@@ -1,18 +1,27 @@
 import { Button } from "@/components/ui/button";
+import { botLevelList } from "@/game/bot";
 import { GAME_MODES, modeList } from "@/game/modes";
-import type { GameModeId, GameSettings, GameState, PieceSymbol } from "@/types/chess";
-import { Flag, Handshake, RefreshCw, Repeat2, Settings, Timer, Undo2, X } from "lucide-react";
+import type {
+  BotLevelId,
+  GameModeId,
+  GameSettings,
+  GameState,
+  PieceSymbol,
+} from "@/types/chess";
+import { Bot, Flag, Handshake, Info, RefreshCw, Repeat2, Settings, Timer, Undo2, X } from "lucide-react";
 import { CapturedPieces } from "./CapturedPieces";
 import { MoveList } from "./MoveList";
 import { SettingsPanel } from "./SettingsPanel";
 
 interface GameSidebarProps {
   state: GameState;
+  botThinking: boolean;
   capturedByYou: PieceSymbol[];
   settings: GameSettings;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
   onModeChange: (modeId: GameModeId) => void;
+  onBotLevelChange: (level: BotLevelId) => void;
   onSettingChange: <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => void;
   onOfferDraw: () => void;
   onFlipBoard: () => void;
@@ -23,11 +32,13 @@ interface GameSidebarProps {
 
 export function GameSidebar({
   state,
+  botThinking,
   capturedByYou,
   settings,
   settingsOpen,
   onSettingsOpenChange,
   onModeChange,
+  onBotLevelChange,
   onSettingChange,
   onOfferDraw,
   onFlipBoard,
@@ -37,13 +48,16 @@ export function GameSidebar({
 }: GameSidebarProps) {
   const mode = GAME_MODES[state.modeId];
   const activePlayer = state.players.find((player) => player.seat === state.activeSeat);
+  const turnLabel = botThinking
+    ? `${activePlayer?.name ?? "Bot"} is thinking…`
+    : `Turn: ${activePlayer?.name ?? state.activeSeat}`;
 
   return (
     <aside className="flex h-full min-h-0 w-[300px] shrink-0 flex-col px-4 py-3">
       <div className="mb-3 flex items-center justify-between">
         <div className="min-w-0">
           <div className="truncate text-lg font-semibold">{mode.name}</div>
-          <div className="truncate text-xs text-muted-foreground">Turn: {activePlayer?.name ?? state.activeSeat}</div>
+          <div className="truncate text-xs text-muted-foreground">{turnLabel}</div>
         </div>
         <Button
           type="button"
@@ -63,6 +77,34 @@ export function GameSidebar({
         </div>
       ) : (
         <>
+          {state.hint && (
+            <div className="mb-3 flex items-start gap-2 rounded-2xl bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
+              <Info className="mt-px size-3.5 shrink-0" />
+              <span>{state.hint}</span>
+            </div>
+          )}
+
+          <div className="mb-3">
+            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Bot className="size-3.5" />
+              Bot level
+            </div>
+            <div className="grid grid-cols-4 gap-1">
+              {botLevelList.map((level) => (
+                <Button
+                  key={level.id}
+                  type="button"
+                  title={`${level.description} Starts a new game.`}
+                  variant={level.id === state.botLevel ? "default" : "ghost"}
+                  className="h-8 rounded-2xl px-1 text-xs hover:bg-foreground/7"
+                  onClick={() => onBotLevelChange(level.id)}
+                >
+                  {level.name}
+                </Button>
+              ))}
+            </div>
+          </div>
+
           <div className="mb-3 grid grid-cols-3 gap-1">
             {modeList.map((item) => (
               <Button

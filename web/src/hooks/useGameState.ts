@@ -1,106 +1,35 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BOT_LEVELS, chooseBotMove } from "@/game/bot";
+import {
+  INITIAL_BOARD,
+  applyMoveToBoard,
+  cloneBoard,
+  getAllLegalMoves,
+  getLegalMovesForPiece,
+  isPlayerInCheck,
+  isWhite,
+  opposingSeat,
+  pieceSeat,
+  samePosition,
+  toNotation,
+} from "@/game/engine";
 import type {
-  BoardState,
+  BotLevelId,
   GameModeId,
   GameState,
   PieceSymbol,
   Position,
-  Square,
 } from "@/types/chess";
 
-const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
+const HUMAN_SEAT = "white";
+const BOT_SEAT = "black";
 
-/* ✅ REAL CHESS START POSITION */
-const INITIAL_BOARD: BoardState = [
-  ["r", "n", "b", "q", "k", "b", "n", "r"],
-  ["p", "p", "p", "p", "p", "p", "p", "p"],
-  ["", "", "", "", "", "", "", ""],
-  ["", "", "", "", "", "", "", ""],
-  ["", "", "", "", "", "", "", ""],
-  ["", "", "", "", "", "", "", ""],
-  ["P", "P", "P", "P", "P", "P", "P", "P"],
-  ["R", "N", "B", "Q", "K", "B", "N", "R"],
-];
-
-function cloneBoard(board: BoardState): BoardState {
-  return board.map((r) => [...r]);
-}
-
-function inBounds(p: Position) {
-  return p.row >= 0 && p.row < 8 && p.col >= 0 && p.col < 8;
-}
-
-function isWhite(piece: Square) {
-  return !!piece && piece === piece.toUpperCase();
-}
-
-function pieceSeat(piece: Square) {
-  if (!piece) return "";
-  return isWhite(piece) ? "white" : "black";
-}
-
-function samePosition(a: Position | null, b: Position) {
-  return !!a && a.row === b.row && a.col === b.col;
-}
-
-function findKingPosition(board: BoardState, seat: string): Position | null {
-  for (let row = 0; row < board.length; row += 1) {
-    for (let col = 0; col < board[row].length; col += 1) {
-      const piece = board[row][col];
-      if (piece === (seat === "white" ? "K" : "k")) {
-        return { row, col };
-      }
-    }
-  }
-
-  return null;
-}
-
-export function isPlayerInCheck(board: BoardState, seat: string) {
-  const king = findKingPosition(board, seat);
-  if (!king) {
-    return false;
-  }
-
-  return isSquareAttacked(board, king, seat === "white" ? "black" : "white");
-}
-
-function isSquareAttacked(board: BoardState, target: Position, bySeat: string) {
-  for (let row = 0; row < board.length; row += 1) {
-    for (let col = 0; col < board[row].length; col += 1) {
-      const piece = board[row][col];
-      if (!piece || pieceSeat(piece) !== bySeat) {
-        continue;
-      }
-
-      const from = { row, col };
-      const attacks = getPseudoLegalMoves(board, from);
-      if (attacks.some((move) => samePosition(move, target))) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-function getLegalMovesForPiece(board: BoardState, from: Position) {
-  const piece = board[from.row][from.col];
-  if (!piece) {
-    return [];
-  }
-
-  const seat = pieceSeat(piece);
-  const pseudoMoves = getPseudoLegalMoves(board, from);
-
-  return pseudoMoves.filter((to) => {
-    const nextBoard = cloneBoard(board);
-    const moving = nextBoard[from.row][from.col] as PieceSymbol;
-    nextBoard[from.row][from.col] = "";
-    nextBoard[to.row][to.col] = moving;
-    return !isPlayerInCheck(nextBoard, seat);
-  });
-}
+const BOT_RATINGS: Record<BotLevelId, number> = {
+  beginner: 600,
+  casual: 1100,
+  club: 1500,
+  expert: 1850,
+};
 
 function parseClockSeconds(clock: string): number {
   const parts = String(clock).split(":").map(Number);
@@ -122,182 +51,12 @@ function formatClockFromSeconds(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function notation(
-  from: Position,
-  to: Position,
-  piece: PieceSymbol,
-  captured: boolean
-) {
-  const prefix = piece.toUpperCase() === "P" ? "" : piece.toUpperCase();
-  const cap = captured ? "x" : "";
-  return `${prefix}${FILES[from.col]}${8 - from.row}${cap}${
-    FILES[to.col]
-  }${8 - to.row}`;
-}
-
-/* ---------------- MOVES ---------------- */
-
-function rayMoves(
-  board: BoardState,
-  from: Position,
-  seat: string,
-  dirs: Position[]
-) {
-  const res: Position[] = [];
-
-  for (const d of dirs) {
-    let n = { row: from.row + d.row, col: from.col + d.col };
-
-    while (inBounds(n)) {
-      const t = board[n.row][n.col];
-
-      if (!t) {
-        res.push(n);
-      } else {
-        if (pieceSeat(t) !== seat) res.push(n);
-        break;
-      }
-
-      n = { row: n.row + d.row, col: n.col + d.col };
-    }
-  }
-
-  return res;
-}
-
-function getPseudoLegalMoves(board: BoardState, from: Position) {
-  const piece = board[from.row][from.col];
-  if (!piece) return [];
-
-  const seat = pieceSeat(piece);
-  const type = piece.toLowerCase();
-
-  if (type === "n") {
-    const jumps = [
-      [-2, -1], [-2, 1],
-      [-1, -2], [-1, 2],
-      [1, -2], [1, 2],
-      [2, -1], [2, 1],
-    ];
-
-    return jumps
-      .map(([r, c]) => ({ row: from.row + r, col: from.col + c }))
-      .filter(
-        (p) => inBounds(p) && pieceSeat(board[p.row][p.col]) !== seat
-      );
-  }
-
-  if (type === "b") {
-    return rayMoves(board, from, seat, [
-      { row: -1, col: -1 },
-      { row: -1, col: 1 },
-      { row: 1, col: -1 },
-      { row: 1, col: 1 },
-    ]);
-  }
-
-  if (type === "r") {
-    return rayMoves(board, from, seat, [
-      { row: -1, col: 0 },
-      { row: 1, col: 0 },
-      { row: 0, col: -1 },
-      { row: 0, col: 1 },
-    ]);
-  }
-
-  if (type === "q") {
-    return rayMoves(board, from, seat, [
-      { row: -1, col: -1 },
-      { row: -1, col: 1 },
-      { row: 1, col: -1 },
-      { row: 1, col: 1 },
-      { row: -1, col: 0 },
-      { row: 1, col: 0 },
-      { row: 0, col: -1 },
-      { row: 0, col: 1 },
-    ]);
-  }
-
-  if (type === "k") {
-    const steps = [
-      [-1, -1], [-1, 0], [-1, 1],
-      [0, -1], [0, 1],
-      [1, -1], [1, 0], [1, 1],
-    ];
-
-    return steps
-      .map(([r, c]) => ({ row: from.row + r, col: from.col + c }))
-      .filter(
-        (p) => inBounds(p) && pieceSeat(board[p.row][p.col]) !== seat
-      );
-  }
-
-  /* pawn */
-  const dir = seat === "white" ? -1 : 1;
-  const start = seat === "white" ? 6 : 1;
-
-  const moves: Position[] = [];
-
-  const one = { row: from.row + dir, col: from.col };
-  const two = { row: from.row + dir * 2, col: from.col };
-
-  if (inBounds(one) && !board[one.row][one.col]) moves.push(one);
-
-  if (
-    from.row === start &&
-    !board[one.row][one.col] &&
-    !board[two.row][two.col]
-  ) {
-    moves.push(two);
-  }
-
-  for (const c of [from.col - 1, from.col + 1]) {
-    const cap = { row: from.row + dir, col: c };
-
-    if (
-      inBounds(cap) &&
-      board[cap.row][cap.col] &&
-      pieceSeat(board[cap.row][cap.col]) !== seat
-    ) {
-      moves.push(cap);
-    }
-  }
-
-  return moves;
-}
-
-/* ---------------- APPLY MOVE ---------------- */
-
-function getAllLegalMovesForSeat(board: BoardState, seat: string) {
-  const moves: Position[] = [];
-
-  for (let row = 0; row < board.length; row += 1) {
-    for (let col = 0; col < board[row].length; col += 1) {
-      const piece = board[row][col];
-      if (!piece || pieceSeat(piece) !== seat) {
-        continue;
-      }
-
-      const from = { row, col };
-      const legal = getLegalMovesForPiece(board, from);
-      moves.push(...legal);
-    }
-  }
-
-  return moves;
-}
-
 function applyMove(state: GameState, from: Position, to: Position): GameState {
-  const board = cloneBoard(state.board);
+  const moving = state.board[from.row][from.col] as PieceSymbol;
+  const captured = state.board[to.row][to.col] as PieceSymbol | "";
+  const board = applyMoveToBoard(state.board, from, to);
 
-  const moving = board[from.row][from.col] as PieceSymbol;
-  const captured = board[to.row][to.col] as PieceSymbol | "";
-
-  board[to.row][to.col] = moving;
-  board[from.row][from.col] = "";
-
-  const moveText = notation(from, to, moving, !!captured);
-
+  const moveText = toNotation(from, to, moving, !!captured);
   const moves = [...state.moves];
 
   if (state.activeSeat === "white") {
@@ -311,21 +70,19 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
     }
   }
 
-  const nextSeat = state.activeSeat === "white" ? "black" : "white";
-  const kingCaptured = !!captured && captured.toLowerCase() === "k";
+  const nextSeat = opposingSeat(state.activeSeat);
   const isOpponentInCheck = isPlayerInCheck(board, nextSeat);
-  const hasOpponentLegalMoves = getAllLegalMovesForSeat(board, nextSeat).length > 0;
-  const opponentIsCheckmated = isOpponentInCheck && !hasOpponentLegalMoves;
-  const isStalemate = !isOpponentInCheck && !hasOpponentLegalMoves;
+  const opponentHasMoves = getAllLegalMoves(board, nextSeat).length > 0;
 
   return {
     ...state,
     board,
-    activeSeat: kingCaptured ? state.activeSeat : nextSeat,
+    activeSeat: nextSeat,
     selectedSquare: null,
     legalTargets: [],
     lastMove: { from, to },
     moves,
+    hint: null,
     captured: captured
       ? {
           byYou: isWhite(captured)
@@ -336,38 +93,36 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
             : state.captured.byOpponent,
         }
       : state.captured,
-    status: kingCaptured || opponentIsCheckmated ? "checkmate" : isStalemate ? "draw" : state.status,
+    status: opponentHasMoves ? state.status : isOpponentInCheck ? "checkmate" : "draw",
   };
 }
 
-/* ---------------- CLEAN STATE FACTORY ---------------- */
-
-function createInitialState(): GameState {
+function createInitialState(botLevel: BotLevelId): GameState {
   return {
     modeId: "classic",
     board: cloneBoard(INITIAL_BOARD),
 
     players: [
       {
-        id: "opponent",
-        name: "M. Novak",
-        rating: 1340,
+        id: "bot",
+        name: `${BOT_LEVELS[botLevel].name} bot`,
+        rating: BOT_RATINGS[botLevel],
         clock: "10:00",
-        seat: "black",
-        team: "black",
+        seat: BOT_SEAT,
+        team: BOT_SEAT,
       },
       {
         id: "you",
         name: "You",
         rating: 1204,
         clock: "10:00",
-        seat: "white",
-        team: "white",
+        seat: HUMAN_SEAT,
+        team: HUMAN_SEAT,
         isYou: true,
       },
     ],
 
-    activeSeat: "white",
+    activeSeat: HUMAN_SEAT,
 
     selectedSquare: null,
     legalTargets: [],
@@ -375,6 +130,9 @@ function createInitialState(): GameState {
     lastMove: null,
 
     moves: [],
+
+    botLevel,
+    hint: null,
 
     captured: {
       byYou: [],
@@ -385,11 +143,10 @@ function createInitialState(): GameState {
   };
 }
 
-/* ---------------- HOOK ---------------- */
-
-export function useGameState() {
-  const [state, setState] = useState<GameState>(() => createInitialState());
+export function useGameState(initialBotLevel: BotLevelId = "casual") {
+  const [state, setState] = useState<GameState>(() => createInitialState(initialBotLevel));
   const [, setHistory] = useState<GameState[]>([]);
+  const botTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (state.status !== "ongoing") {
@@ -414,16 +171,12 @@ export function useGameState() {
         const nextSeconds = Math.max(0, parseClockSeconds(activePlayer.clock) - 1);
 
         if (nextSeconds <= 0) {
-          const winnerSeat = prev.activeSeat === "white" ? "black" : "white";
-
+          // The seat left active at a terminal status is the losing one.
           return {
             ...prev,
             players: prev.players.map((player, index) =>
-              index === activeIndex
-                ? { ...player, clock: "0:00" }
-                : player
+              index === activeIndex ? { ...player, clock: "0:00" } : player
             ),
-            activeSeat: winnerSeat,
             status: "timeout",
           };
         }
@@ -443,46 +196,36 @@ export function useGameState() {
   }, [state.status, state.activeSeat]);
 
   useEffect(() => {
-    if (state.status !== "ongoing") {
-      return;
+    if (state.status !== "ongoing" || state.activeSeat !== BOT_SEAT) {
+      return undefined;
     }
 
-    const activeKing = findKingPosition(state.board, state.activeSeat);
-    if (!activeKing) {
-      return;
-    }
-
-    const inCheck = isPlayerInCheck(state.board, state.activeSeat);
-    const legalMoves = getAllLegalMovesForSeat(state.board, state.activeSeat);
-
-    if (inCheck && legalMoves.length === 0) {
+    botTimerRef.current = window.setTimeout(() => {
       setState((prev) => {
-        if (prev.status !== "ongoing") {
+        if (prev.status !== "ongoing" || prev.activeSeat !== BOT_SEAT) {
           return prev;
         }
 
-        return {
-          ...prev,
-          activeSeat: prev.activeSeat === "white" ? "black" : "white",
-          status: "checkmate",
-        };
-      });
-      return;
-    }
+        const move = chooseBotMove(prev.board, BOT_SEAT, prev.botLevel);
 
-    if (!inCheck && legalMoves.length === 0) {
-      setState((prev) => {
-        if (prev.status !== "ongoing") {
-          return prev;
+        if (!move) {
+          return {
+            ...prev,
+            status: isPlayerInCheck(prev.board, BOT_SEAT) ? "checkmate" : "draw",
+          };
         }
 
-        return {
-          ...prev,
-          status: "draw",
-        };
+        return applyMove(prev, move.from, move.to);
       });
-    }
-  }, [state.board, state.activeSeat, state.status]);
+    }, BOT_LEVELS[state.botLevel].minThinkMs);
+
+    return () => {
+      if (botTimerRef.current !== null) {
+        window.clearTimeout(botTimerRef.current);
+        botTimerRef.current = null;
+      }
+    };
+  }, [state.activeSeat, state.status, state.botLevel]);
 
   const selectSquare = useCallback((pos: Position) => {
     setState((prev) => {
@@ -490,35 +233,48 @@ export function useGameState() {
         return prev;
       }
 
+      if (prev.activeSeat !== HUMAN_SEAT) {
+        const bot = prev.players.find((player) => player.seat === BOT_SEAT);
+        return { ...prev, hint: `Wait for ${bot?.name ?? "the bot"} to move` };
+      }
+
       const piece = prev.board[pos.row][pos.col];
       const selected = prev.selectedSquare;
+      const selectedPiece = selected ? prev.board[selected.row][selected.col] : "";
+      const isLegalTarget = prev.legalTargets.some((target) => samePosition(target, pos));
 
-      const selectedPiece = selected
-        ? prev.board[selected.row][selected.col]
-        : "";
-
-      const canMove = prev.legalTargets.some((t) =>
-        samePosition(t, pos)
-      );
-
-      if (selected && selectedPiece && canMove) {
+      if (selected && selectedPiece && isLegalTarget) {
         setHistory((previous) => [...previous, prev]);
         return applyMove(prev, selected, pos);
       }
 
-      if (piece && pieceSeat(piece) === prev.activeSeat) {
-        // Real chess rule: if you're in check, you may move any piece
-        // as long as the resulting position removes the check.
-        const legalMoves = getLegalMovesForPiece(prev.board, pos);
+      if (piece && pieceSeat(piece) === HUMAN_SEAT) {
+        // Real chess rule: while in check you may move any piece, as long as
+        // the resulting position removes the check.
+        const legalTargets = getLegalMovesForPiece(prev.board, pos);
 
         return {
           ...prev,
           selectedSquare: pos,
-          legalTargets: legalMoves,
+          legalTargets,
+          hint: legalTargets.length
+            ? null
+            : isPlayerInCheck(prev.board, HUMAN_SEAT)
+              ? "You are in check — that piece cannot stop it"
+              : "That piece has no legal moves",
         };
       }
 
-      return { ...prev, selectedSquare: null, legalTargets: [] };
+      return {
+        ...prev,
+        selectedSquare: null,
+        legalTargets: [],
+        hint: selected
+          ? "That square is not a legal move for the selected piece"
+          : piece
+            ? "That is your opponent's piece"
+            : null,
+      };
     });
   }, []);
 
@@ -526,22 +282,21 @@ export function useGameState() {
     setState((prev) => ({ ...prev, modeId }));
   }, []);
 
+  const setBotLevel = useCallback((botLevel: BotLevelId) => {
+    setHistory([]);
+    setState(createInitialState(botLevel));
+  }, []);
+
   const resign = useCallback(() => {
-    setState((prev) => {
-      const winnerSeat = prev.activeSeat === "white" ? "black" : "white";
-      return {
-        ...prev,
-        activeSeat: winnerSeat,
-        status: "resigned",
-      };
-    });
+    setState((prev) => ({ ...prev, status: "resigned" }));
   }, []);
 
   const resetGame = useCallback(() => {
     setHistory([]);
-    setState(createInitialState());
+    setState((prev) => createInitialState(prev.botLevel));
   }, []);
 
+  /** Takes back the human move together with the bot's reply. */
   const undoMove = useCallback(() => {
     setHistory((previous) => {
       const last = previous[previous.length - 1];
@@ -549,23 +304,28 @@ export function useGameState() {
         return previous;
       }
 
-      setState(last);
+      if (botTimerRef.current !== null) {
+        window.clearTimeout(botTimerRef.current);
+        botTimerRef.current = null;
+      }
+
+      setState({ ...last, hint: null });
       return previous.slice(0, -1);
     });
   }, []);
 
   const activePlayer = useMemo(
-    () =>
-      state.players.find((p) => p.seat === state.activeSeat) ??
-      state.players[0],
+    () => state.players.find((player) => player.seat === state.activeSeat) ?? state.players[0],
     [state.activeSeat, state.players]
   );
 
   return {
     state,
     activePlayer,
+    botThinking: state.status === "ongoing" && state.activeSeat === BOT_SEAT,
     selectSquare,
     setMode,
+    setBotLevel,
     resign,
     resetGame,
     undoMove,

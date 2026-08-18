@@ -4,6 +4,7 @@ import { Timer, Crown } from "lucide-react";
 interface PlayerRowProps {
   player: PlayerInfo;
   active: boolean;
+  thinking?: boolean;
 }
 
 function parseClockSeconds(clock: string): number | null {
@@ -21,7 +22,7 @@ function initials(name: string): string {
     .join("");
 }
 
-export function PlayerRow({ player, active }: PlayerRowProps) {
+export function PlayerRow({ player, active, thinking = false }: PlayerRowProps) {
   const seconds = parseClockSeconds(player.clock);
   const isLow = seconds !== null && seconds < 60;
   const isCritical = seconds !== null && seconds < 10;
@@ -77,7 +78,7 @@ export function PlayerRow({ player, active }: PlayerRowProps) {
           >
             <span className="font-mono tabular-nums">{player.rating}</span>
             <span className="opacity-50">·</span>
-            <span>{player.seat}</span>
+            <span>{thinking ? "thinking…" : player.seat}</span>
           </div>
         </div>
       </div>

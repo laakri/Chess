@@ -12,7 +12,8 @@ import { useGameState } from "@/hooks/useGameState";
 export default function Game() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resignConfirmOpen, setResignConfirmOpen] = useState(false);
-  const { state, selectSquare, setMode, resign, resetGame, undoMove } = useGameState();
+  const { state, botThinking, selectSquare, setMode, setBotLevel, resign, resetGame, undoMove } =
+    useGameState();
   const { settings, updateSetting } = useGameSettings();
   const lastMoveRef = useRef(state.lastMove);
   const opponent = state.players.find((player) => !player.isYou) ?? state.players[0];
@@ -74,7 +75,11 @@ export default function Game() {
 
         <section className="flex min-w-0 flex-1 items-center justify-center px-3 py-2">
           <div className="flex min-h-0 w-full max-w-[900px] flex-col items-center gap-1.5">
-            <PlayerRow player={opponent} active={state.activeSeat === opponent.seat} />
+            <PlayerRow
+              player={opponent}
+              active={state.activeSeat === opponent.seat}
+              thinking={botThinking}
+            />
 
             <Board
               board={state.board}
@@ -96,11 +101,13 @@ export default function Game() {
 
         <GameSidebar
         state={state}
+        botThinking={botThinking}
         capturedByYou={state.captured.byYou}
         settings={settings}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
         onModeChange={setMode}
+        onBotLevelChange={setBotLevel}
         onSettingChange={updateSetting}
         onOfferDraw={() => console.log("offer draw")}
         onFlipBoard={() => console.log("flip board")}
