@@ -12,6 +12,7 @@ import { useGameState } from "@/hooks/useGameState";
 export default function Game() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resignConfirmOpen, setResignConfirmOpen] = useState(false);
+  const [resultDismissed, setResultDismissed] = useState(false);
   const { state, botThinking, selectSquare, setMode, setBotLevel, resign, resetGame, undoMove } =
     useGameState();
   const { settings, updateSetting } = useGameSettings();
@@ -107,12 +108,21 @@ export default function Game() {
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
         onModeChange={setMode}
-        onBotLevelChange={setBotLevel}
+        onBotLevelChange={(level) => {
+          setResultDismissed(false);
+          setBotLevel(level);
+        }}
         onSettingChange={updateSetting}
         onOfferDraw={() => console.log("offer draw")}
         onFlipBoard={() => console.log("flip board")}
-        onReset={resetGame}
-        onUndo={undoMove}
+        onReset={() => {
+          setResultDismissed(false);
+          resetGame();
+        }}
+        onUndo={() => {
+          setResultDismissed(false);
+          undoMove();
+        }}
         onResign={() => {
           if (settings.confirmResign) setResignConfirmOpen(true);
           else resign();
@@ -133,7 +143,7 @@ export default function Game() {
         />
       </main>
 
-      {isWinState && (
+      {isWinState && !resultDismissed && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4">
           <div className="w-full max-w-sm rounded-[24px] border border-border/70 bg-card px-5 py-5 text-center shadow-xl">
             <div className="mb-2 text-[11px] font-medium uppercase tracking-[0.24em] text-amber-500">
@@ -143,10 +153,17 @@ export default function Game() {
             <p className="mb-4 text-sm text-muted-foreground">{terminalMessage}</p>
 
             <div className="flex justify-center gap-2">
-              <Button variant="outline" className="rounded-xl" onClick={resetGame}>
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => {
+                  setResultDismissed(false);
+                  resetGame();
+                }}
+              >
                 Rematch
               </Button>
-              <Button className="rounded-xl" onClick={() => setSettingsOpen(false)}>
+              <Button className="rounded-xl" onClick={() => setResultDismissed(true)}>
                 Close
               </Button>
             </div>

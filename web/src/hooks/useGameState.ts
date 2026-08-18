@@ -273,7 +273,7 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
           ? "That square is not a legal move for the selected piece"
           : piece
             ? "That is your opponent's piece"
-            : null,
+            : "Pick one of your pieces to see its legal moves",
       };
     });
   }, []);
