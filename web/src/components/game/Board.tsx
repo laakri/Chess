@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { isPlayerInCheck } from "@/hooks/useGameState";
+import { isPlayerInCheck } from "@/game/engine";
 import type { BoardState, BoardSizeId, BoardThemeId, PieceSetId, Position } from "@/types/chess";
 import { Square } from "./Square";
 

@@ -29,6 +29,8 @@ export interface MoveRecord {
 
 export type GameModeId = "classic" | "rapid" | "coop-preview";
 
+export type BotLevelId = "beginner" | "casual" | "club" | "expert";
+
 export interface GameModeConfig {
   id: GameModeId;
   name: string;
@@ -69,6 +71,9 @@ export interface GameState {
   legalTargets: Position[];
   lastMove: { from: Position; to: Position } | null;
   moves: MoveRecord[];
+  botLevel: BotLevelId;
+  /** Short explanation of the last ignored click, e.g. "Not your turn". */
+  hint: string | null;
   captured: {
     byYou: PieceSymbol[];
     byOpponent: PieceSymbol[];
