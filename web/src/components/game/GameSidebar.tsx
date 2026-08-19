@@ -1,17 +1,19 @@
 import { Button } from "@/components/ui/button";
 import { botLevelList } from "@/game/bot";
-import { GAME_MODES, modeList } from "@/game/modes";
+import { GAME_MODES } from "@/game/modes";
 import type {
   BotLevelId,
-  GameModeId,
+  ChessSeat,
   GameSettings,
   GameState,
   PieceSymbol,
 } from "@/types/chess";
-import { Bot, Flag, Handshake, Info, RefreshCw, Repeat2, Settings, Timer, Undo2, X } from "lucide-react";
+import { Info, Palette, RefreshCw, Repeat2, Settings, Timer, Undo2, X } from "lucide-react";
 import { CapturedPieces } from "./CapturedPieces";
 import { MoveList } from "./MoveList";
 import { SettingsPanel } from "./SettingsPanel";
+import { CoachPanel } from "./CoachPanel";
+import { useState } from "react";
 
 interface GameSidebarProps {
   state: GameState;
@@ -20,14 +22,13 @@ interface GameSidebarProps {
   settings: GameSettings;
   settingsOpen: boolean;
   onSettingsOpenChange: (open: boolean) => void;
-  onModeChange: (modeId: GameModeId) => void;
-  onBotLevelChange: (level: BotLevelId) => void;
+  onPlayerSeatChange: (playerSeat: ChessSeat) => void;
+  onStartBot: (level: BotLevelId, playerSeat: ChessSeat) => void;
   onSettingChange: <K extends keyof GameSettings>(key: K, value: GameSettings[K]) => void;
-  onOfferDraw: () => void;
   onFlipBoard: () => void;
+  onSwitchColors: () => void;
   onReset: () => void;
   onUndo: () => void;
-  onResign: () => void;
 }
 
 export function GameSidebar({
@@ -37,16 +38,17 @@ export function GameSidebar({
   settings,
   settingsOpen,
   onSettingsOpenChange,
-  onModeChange,
-  onBotLevelChange,
+  onPlayerSeatChange,
+  onStartBot,
   onSettingChange,
-  onOfferDraw,
   onFlipBoard,
+  onSwitchColors,
   onReset,
   onUndo,
-  onResign,
 }: GameSidebarProps) {
   const mode = GAME_MODES[state.modeId];
+  const [selectedBotLevel, setSelectedBotLevel] = useState<BotLevelId>(state.botLevel);
+  const [selectedPlayerSeat, setSelectedPlayerSeat] = useState<ChessSeat>("white");
   const activePlayer = state.players.find((player) => player.seat === state.activeSeat);
   const turnLabel = botThinking
     ? `${activePlayer?.name ?? "Bot"} is thinking…`
@@ -77,47 +79,77 @@ export function GameSidebar({
         </div>
       ) : (
         <>
+          {state.modeId === "bot" && !state.botStarted ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="mb-5">
+                <div className="mb-1 text-lg font-semibold">Play against a bot</div>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Choose a level, then start your practice game.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                {botLevelList.map((level) => (
+                  <button
+                    key={level.id}
+                    type="button"
+                    className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
+                      selectedBotLevel === level.id
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border/70 bg-foreground/[0.03] hover:bg-foreground/[0.07]"
+                    }`}
+                    onClick={() => setSelectedBotLevel(level.id)}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold">{level.name}</span>
+                      <span className="text-[11px] opacity-60">{level.depth === 0 ? "Easy" : `Depth ${level.depth}`}</span>
+                    </div>
+                    <div className="mt-1 text-xs opacity-70">{level.description}</div>
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-5">
+                <div className="mb-2 text-xs font-medium text-muted-foreground">Play as</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["white", "black"] as ChessSeat[]).map((seat) => (
+                    <button
+                      key={seat}
+                      type="button"
+                      className={`rounded-2xl border px-3 py-2 text-sm font-semibold capitalize transition ${
+                        selectedPlayerSeat === seat
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border/70 bg-foreground/[0.03] hover:bg-foreground/[0.07]"
+                      }`}
+                      onClick={() => {
+                        setSelectedPlayerSeat(seat);
+                        onPlayerSeatChange(seat);
+                      }}
+                    >
+                      {seat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                className="mt-5 w-full rounded-2xl"
+                onClick={() => onStartBot(selectedBotLevel, selectedPlayerSeat)}
+              >
+                Start game
+              </Button>
+            </div>
+          ) : (
+            <>
+          <CoachPanel feedback={state.moveFeedback} botThinking={botThinking} />
+
           {state.hint && (
             <div className="mb-3 flex items-start gap-2 rounded-2xl bg-amber-500/10 px-3 py-2 text-xs text-amber-600">
               <Info className="mt-px size-3.5 shrink-0" />
               <span>{state.hint}</span>
             </div>
           )}
-
-          <div className="mb-3">
-            <div className="mb-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Bot className="size-3.5" />
-              Bot level
-            </div>
-            <div className="grid grid-cols-4 gap-1">
-              {botLevelList.map((level) => (
-                <Button
-                  key={level.id}
-                  type="button"
-                  title={`${level.description} Starts a new game.`}
-                  variant={level.id === state.botLevel ? "default" : "ghost"}
-                  className="h-8 rounded-2xl px-1 text-xs hover:bg-foreground/7"
-                  onClick={() => onBotLevelChange(level.id)}
-                >
-                  {level.name}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <div className="mb-3 grid grid-cols-3 gap-1">
-            {modeList.map((item) => (
-              <Button
-                key={item.id}
-                type="button"
-                variant={item.id === state.modeId ? "default" : "ghost"}
-                className="h-8 rounded-2xl px-2 text-xs hover:bg-foreground/7"
-                onClick={() => onModeChange(item.id)}
-              >
-                {item.name.replace(" Chess", "").replace(" Preview", "")}
-              </Button>
-            ))}
-          </div>
 
           <div className="mb-3 flex items-center gap-2 rounded-3xl bg-foreground/[0.04] px-3 py-2">
             <Timer className="size-4 text-muted-foreground" />
@@ -128,11 +160,10 @@ export function GameSidebar({
           </div>
 
           <div className="mb-3 grid grid-cols-2 gap-1">
-            <ActionButton icon={<Handshake className="size-4" />} label="Draw" onClick={onOfferDraw} />
             <ActionButton icon={<Repeat2 className="size-4" />} label="Flip" onClick={onFlipBoard} />
+            <ActionButton icon={<Palette className="size-4" />} label="Colors" onClick={onSwitchColors} />
             <ActionButton icon={<Undo2 className="size-4" />} label="Undo" onClick={onUndo} />
             <ActionButton icon={<RefreshCw className="size-4" />} label="Reset" onClick={onReset} />
-            <ActionButton danger icon={<Flag className="size-4" />} label="Resign" onClick={onResign} />
           </div>
 
           {settings.showCaptured && (
@@ -145,6 +176,8 @@ export function GameSidebar({
             <div className="min-h-0 flex-1">
               <MoveList moves={state.moves} />
             </div>
+          )}
+            </>
           )}
         </>
       )}

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOT_LEVELS, chooseBotMove } from "@/game/bot";
+import { BOT_LEVELS, analyzePlayerMove, chooseBotMove } from "@/game/bot";
 import {
   INITIAL_BOARD,
+  INITIAL_CASTLING_RIGHTS,
   applyMoveToBoard,
   cloneBoard,
   getAllLegalMoves,
@@ -12,17 +13,16 @@ import {
   pieceSeat,
   samePosition,
   toNotation,
+  updateCastlingRights,
 } from "@/game/engine";
 import type {
   BotLevelId,
+  ChessSeat,
   GameModeId,
   GameState,
   PieceSymbol,
   Position,
 } from "@/types/chess";
-
-const HUMAN_SEAT = "white";
-const BOT_SEAT = "black";
 
 const BOT_RATINGS: Record<BotLevelId, number> = {
   beginner: 600,
@@ -55,6 +55,7 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
   const moving = state.board[from.row][from.col] as PieceSymbol;
   const captured = state.board[to.row][to.col] as PieceSymbol | "";
   const board = applyMoveToBoard(state.board, from, to);
+  const castlingRights = updateCastlingRights(state.castlingRights, state.board, from, to);
 
   const moveText = toNotation(from, to, moving, !!captured);
   const moves = [...state.moves];
@@ -72,7 +73,7 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
 
   const nextSeat = opposingSeat(state.activeSeat);
   const isOpponentInCheck = isPlayerInCheck(board, nextSeat);
-  const opponentHasMoves = getAllLegalMoves(board, nextSeat).length > 0;
+  const opponentHasMoves = getAllLegalMoves(board, nextSeat, castlingRights).length > 0;
 
   return {
     ...state,
@@ -82,6 +83,7 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
     legalTargets: [],
     lastMove: { from, to },
     moves,
+    castlingRights,
     hint: null,
     captured: captured
       ? {
@@ -97,9 +99,11 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
   };
 }
 
-function createInitialState(botLevel: BotLevelId): GameState {
+function createInitialState(botLevel: BotLevelId, playerSeat: ChessSeat = "white"): GameState {
+  const botSeat = opposingSeat(playerSeat);
+
   return {
-    modeId: "classic",
+    modeId: "bot",
     board: cloneBoard(INITIAL_BOARD),
 
     players: [
@@ -108,21 +112,21 @@ function createInitialState(botLevel: BotLevelId): GameState {
         name: `${BOT_LEVELS[botLevel].name} bot`,
         rating: BOT_RATINGS[botLevel],
         clock: "10:00",
-        seat: BOT_SEAT,
-        team: BOT_SEAT,
+        seat: botSeat,
+        team: botSeat,
       },
       {
         id: "you",
         name: "You",
         rating: 1204,
         clock: "10:00",
-        seat: HUMAN_SEAT,
-        team: HUMAN_SEAT,
+        seat: playerSeat,
+        team: playerSeat,
         isYou: true,
       },
     ],
 
-    activeSeat: HUMAN_SEAT,
+    activeSeat: "white",
 
     selectedSquare: null,
     legalTargets: [],
@@ -130,8 +134,12 @@ function createInitialState(botLevel: BotLevelId): GameState {
     lastMove: null,
 
     moves: [],
+    moveFeedback: null,
+    castlingRights: INITIAL_CASTLING_RIGHTS,
 
     botLevel,
+    playerSeat,
+    botStarted: false,
     hint: null,
 
     captured: {
@@ -149,7 +157,7 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
   const botTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (state.status !== "ongoing") {
+    if (state.status !== "ongoing" || (state.modeId === "bot" && !state.botStarted)) {
       return undefined;
     }
 
@@ -193,25 +201,28 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [state.status, state.activeSeat]);
+  }, [state.modeId, state.botStarted, state.status, state.activeSeat]);
 
   useEffect(() => {
-    if (state.status !== "ongoing" || state.activeSeat !== BOT_SEAT) {
+    const botSeat = opposingSeat(state.playerSeat);
+
+    if (state.status !== "ongoing" || state.activeSeat !== botSeat) {
       return undefined;
     }
 
     botTimerRef.current = window.setTimeout(() => {
       setState((prev) => {
-        if (prev.status !== "ongoing" || prev.activeSeat !== BOT_SEAT) {
+        const botSeat = opposingSeat(prev.playerSeat);
+        if (prev.status !== "ongoing" || prev.activeSeat !== botSeat) {
           return prev;
         }
 
-        const move = chooseBotMove(prev.board, BOT_SEAT, prev.botLevel);
+        const move = chooseBotMove(prev.board, botSeat, prev.botLevel, prev.castlingRights);
 
         if (!move) {
           return {
             ...prev,
-            status: isPlayerInCheck(prev.board, BOT_SEAT) ? "checkmate" : "draw",
+            status: isPlayerInCheck(prev.board, botSeat) ? "checkmate" : "draw",
           };
         }
 
@@ -225,7 +236,7 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
         botTimerRef.current = null;
       }
     };
-  }, [state.activeSeat, state.status, state.botLevel]);
+  }, [state.activeSeat, state.status, state.botLevel, state.playerSeat]);
 
   const selectSquare = useCallback((pos: Position) => {
     setState((prev) => {
@@ -233,25 +244,67 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
         return prev;
       }
 
-      if (prev.activeSeat !== HUMAN_SEAT) {
-        const bot = prev.players.find((player) => player.seat === BOT_SEAT);
+      const botSeat = opposingSeat(prev.playerSeat);
+
+      if (prev.activeSeat !== prev.playerSeat) {
+        const bot = prev.players.find((player) => player.seat === botSeat);
         return { ...prev, hint: `Wait for ${bot?.name ?? "the bot"} to move` };
       }
 
       const piece = prev.board[pos.row][pos.col];
       const selected = prev.selectedSquare;
       const selectedPiece = selected ? prev.board[selected.row][selected.col] : "";
-      const isLegalTarget = prev.legalTargets.some((target) => samePosition(target, pos));
+      const isKingThenRookCastle =
+        !!selected &&
+        selectedPiece.toLowerCase() === "k" &&
+        !!piece &&
+        piece.toLowerCase() === "r" &&
+        selected.row === pos.row &&
+        selected.col === 4 &&
+        (pos.col === 0 || pos.col === 7);
+      const castleTarget = isKingThenRookCastle
+        ? { row: pos.row, col: pos.col === 7 ? 6 : 2 }
+        : null;
+      const moveTarget = castleTarget ?? pos;
+      const isLegalTarget = prev.legalTargets.some((target) =>
+        samePosition(target, moveTarget)
+      );
 
       if (selected && selectedPiece && isLegalTarget) {
         setHistory((previous) => [...previous, prev]);
-        return applyMove(prev, selected, pos);
+        const nextState = applyMove(prev, selected, moveTarget);
+        const analysisBoard = prev.board;
+        const analysisSeat = prev.playerSeat;
+
+        window.setTimeout(() => {
+          const feedback = analyzePlayerMove(
+            analysisBoard,
+            selected,
+            moveTarget,
+            analysisSeat,
+            prev.castlingRights
+          );
+          setState((current) => {
+            if (
+              current.lastMove?.from.row !== selected.row ||
+              current.lastMove?.from.col !== selected.col ||
+              current.lastMove?.to.row !== moveTarget.row ||
+              current.lastMove?.to.col !== moveTarget.col
+            ) {
+              return current;
+            }
+
+            return { ...current, moveFeedback: feedback };
+          });
+        }, 0);
+
+        return nextState;
       }
 
-      if (piece && pieceSeat(piece) === HUMAN_SEAT) {
+      if (piece && pieceSeat(piece) === prev.playerSeat) {
         // Real chess rule: while in check you may move any piece, as long as
         // the resulting position removes the check.
-        const legalTargets = getLegalMovesForPiece(prev.board, pos);
+        const legalTargets = getLegalMovesForPiece(prev.board, pos, prev.castlingRights);
 
         return {
           ...prev,
@@ -259,7 +312,7 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
           legalTargets,
           hint: legalTargets.length
             ? null
-            : isPlayerInCheck(prev.board, HUMAN_SEAT)
+            : isPlayerInCheck(prev.board, prev.playerSeat)
               ? "You are in check — that piece cannot stop it"
               : "That piece has no legal moves",
         };
@@ -279,12 +332,16 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
   }, []);
 
   const setMode = useCallback((modeId: GameModeId) => {
-    setState((prev) => ({ ...prev, modeId }));
+    setState((prev) => ({
+      ...prev,
+      modeId,
+      botStarted: modeId === "bot" ? false : prev.botStarted,
+    }));
   }, []);
 
-  const setBotLevel = useCallback((botLevel: BotLevelId) => {
+  const setBotLevel = useCallback((botLevel: BotLevelId, playerSeat: ChessSeat) => {
     setHistory([]);
-    setState(createInitialState(botLevel));
+    setState({ ...createInitialState(botLevel, playerSeat), botStarted: true });
   }, []);
 
   const resign = useCallback(() => {
@@ -293,7 +350,12 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
 
   const resetGame = useCallback(() => {
     setHistory([]);
-    setState((prev) => createInitialState(prev.botLevel));
+    setState((prev) => ({ ...createInitialState(prev.botLevel, prev.playerSeat), botStarted: prev.botStarted }));
+  }, []);
+
+  const returnToBotSetup = useCallback(() => {
+    setHistory([]);
+    setState((prev) => createInitialState(prev.botLevel, prev.playerSeat));
   }, []);
 
   /** Takes back the human move together with the bot's reply. */
@@ -322,12 +384,14 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
   return {
     state,
     activePlayer,
-    botThinking: state.status === "ongoing" && state.activeSeat === BOT_SEAT,
+    botThinking:
+      state.status === "ongoing" && state.activeSeat === opposingSeat(state.playerSeat),
     selectSquare,
     setMode,
     setBotLevel,
     resign,
     resetGame,
+    returnToBotSetup,
     undoMove,
   };
 }

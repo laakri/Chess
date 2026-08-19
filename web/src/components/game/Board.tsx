@@ -14,6 +14,9 @@ interface BoardProps {
   showCoordinates: boolean;
   showLegalMoves: boolean;
   traceDurationMs: number;
+  isSetupLocked: boolean;
+  isFlipped: boolean;
+  areColorsSwitched: boolean;
   onSquareClick: (position: Position) => void;
 }
 
@@ -60,6 +63,9 @@ export function Board({
   showCoordinates,
   showLegalMoves,
   traceDurationMs,
+  isSetupLocked,
+  isFlipped,
+  areColorsSwitched,
   onSquareClick,
 }: BoardProps) {
   const isSamePos = (a: Position | null, b: Position) =>
@@ -199,7 +205,7 @@ export function Board({
 
   return (
     <div
-      className={`relative grid aspect-square grid-cols-8 grid-rows-8 ${boardSizeClasses[boardSize]} overflow-hidden rounded-[28px] shadow-2xl shadow-black/10`}
+      className={`relative grid aspect-square grid-cols-8 grid-rows-8 ${boardSizeClasses[boardSize]} overflow-hidden rounded-[28px] shadow-2xl shadow-black/10 transition-[filter,opacity,transform] duration-300 ${isFlipped ? "rotate-180" : ""} ${isSetupLocked ? "pointer-events-none blur-[5px] opacity-65" : ""}`}
       onContextMenu={(event) => event.preventDefault()}
       onMouseUp={endTrace}
     >
@@ -228,23 +234,27 @@ export function Board({
             isActiveKingInCheck &&
             isSamePos(activeKingPosition, position);
           const isLegalTarget = legalTargets.some((target) => isSamePos(target, position));
+          const isCaptureTarget = isLegalTarget && !!piece &&
+            (activeSeat === "white" ? piece === piece.toLowerCase() : piece === piece.toUpperCase());
 
           return (
             <Square
               key={`${r}-${c}`}
               piece={piece}
               position={position}
-              isLight={(r + c) % 2 === 0}
+              isLight={((r + c) % 2 === 0) !== areColorsSwitched}
               isSelected={isSamePos(selectedSquare, position)}
               isLastMove={isLastMove}
               isLastMoveFrom={isFromLastMove}
               isLastMoveTo={isToLastMove}
               isKingInCheck={isKingInCheck}
               isLegalTarget={isLegalTarget}
+              isCaptureTarget={isCaptureTarget}
               boardTheme={boardTheme}
               pieceSet={"image" as PieceSetId}
               showCoordinates={showCoordinates}
               showLegalMove={showLegalMoves}
+              isFlipped={isFlipped}
               onClick={onSquareClick}
               onContextMouseDown={(event, pos) => {
                 if (event.button !== 2) return;

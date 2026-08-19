@@ -1,10 +1,13 @@
 import type { PlayerInfo } from "@/types/chess";
-import { Timer, Crown } from "lucide-react";
+import { Flag, Handshake, Timer, Crown } from "lucide-react";
 
 interface PlayerRowProps {
   player: PlayerInfo;
   active: boolean;
   thinking?: boolean;
+  showActions?: boolean;
+  onOfferDraw?: () => void;
+  onResign?: () => void;
 }
 
 function parseClockSeconds(clock: string): number | null {
@@ -22,7 +25,14 @@ function initials(name: string): string {
     .join("");
 }
 
-export function PlayerRow({ player, active, thinking = false }: PlayerRowProps) {
+export function PlayerRow({
+  player,
+  active,
+  thinking = false,
+  showActions = false,
+  onOfferDraw,
+  onResign,
+}: PlayerRowProps) {
   const seconds = parseClockSeconds(player.clock);
   const isLow = seconds !== null && seconds < 60;
   const isCritical = seconds !== null && seconds < 10;
@@ -83,8 +93,31 @@ export function PlayerRow({ player, active, thinking = false }: PlayerRowProps) 
         </div>
       </div>
 
-      <div
-        className={`flex h-8 items-center gap-1.5 rounded-xl px-2.5 font-mono text-sm font-semibold tabular-nums transition-colors ${
+      <div className="flex items-center gap-2">
+        {showActions && (
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Offer draw"
+              title="Offer draw"
+              className="rounded-lg p-1.5 text-current/60 transition hover:bg-white/10 hover:text-current"
+              onClick={onOfferDraw}
+            >
+              <Handshake className="size-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Resign"
+              title="Resign"
+              className="rounded-lg p-1.5 text-red-400/80 transition hover:bg-red-500/10 hover:text-red-400"
+              onClick={onResign}
+            >
+              <Flag className="size-4" />
+            </button>
+          </div>
+        )}
+        <div
+          className={`flex h-8 items-center gap-1.5 rounded-xl px-2.5 font-mono text-sm font-semibold tabular-nums transition-colors ${
           isCritical
             ? "bg-red-500/15 text-red-500"
             : isLow
@@ -92,10 +125,11 @@ export function PlayerRow({ player, active, thinking = false }: PlayerRowProps) 
               : active
                 ? "bg-white/12 text-white"
                 : "bg-foreground/[0.05] text-muted-foreground"
-        }`}
-      >
-        <Timer className={`size-3.5 ${isCritical && active ? "animate-pulse" : ""}`} />
-        {player.clock}
+          }`}
+        >
+          <Timer className={`size-3.5 ${isCritical && active ? "animate-pulse" : ""}`} />
+          {player.clock}
+        </div>
       </div>
     </div>
   );

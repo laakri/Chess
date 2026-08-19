@@ -11,6 +11,13 @@ export interface Position {
   col: number;
 }
 
+export interface CastlingRights {
+  whiteKingSide: boolean;
+  whiteQueenSide: boolean;
+  blackKingSide: boolean;
+  blackQueenSide: boolean;
+}
+
 export interface PlayerInfo {
   id: string;
   name: string;
@@ -27,9 +34,20 @@ export interface MoveRecord {
   black?: string;
 }
 
-export type GameModeId = "classic" | "rapid" | "coop-preview";
+export type MoveQuality = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+
+export interface MoveFeedback {
+  quality: MoveQuality;
+  label: string;
+  detail: string;
+  bestMove: string;
+  swing: number;
+}
+
+export type GameModeId = "classic" | "rapid" | "bot" | "coop-preview";
 
 export type BotLevelId = "beginner" | "casual" | "club" | "expert";
+export type ChessSeat = "white" | "black";
 
 export interface GameModeConfig {
   id: GameModeId;
@@ -71,7 +89,11 @@ export interface GameState {
   legalTargets: Position[];
   lastMove: { from: Position; to: Position } | null;
   moves: MoveRecord[];
+  moveFeedback: MoveFeedback | null;
+  castlingRights: CastlingRights;
   botLevel: BotLevelId;
+  playerSeat: ChessSeat;
+  botStarted: boolean;
   /** Short explanation of the last ignored click, e.g. "Not your turn". */
   hint: string | null;
   captured: {

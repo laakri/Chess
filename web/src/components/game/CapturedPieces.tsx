@@ -18,7 +18,9 @@ export function CapturedPieces({ pieces, title = "Captured", pieceSet = "image" 
           <span className="text-sm text-muted-foreground">None yet</span>
         ) : (
           pieces.map((p, i) => (
-            <PieceView key={i} piece={p} set={pieceSet} className="w-6 h-6" />
+            <span key={i} className="flex size-6 items-center justify-center">
+              <PieceView key={i} piece={p} set={pieceSet} className="max-h-6 max-w-6 object-contain" />
+            </span>
           ))
         )}
       </div>

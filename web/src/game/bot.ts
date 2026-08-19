@@ -1,10 +1,20 @@
-import type { BoardState, BotLevelId, PieceSymbol } from "@/types/chess";
+import type {
+  BoardState,
+  BotLevelId,
+  CastlingRights,
+  MoveFeedback,
+  MoveQuality,
+  PieceSymbol,
+  Position,
+} from "@/types/chess";
 import {
   applyMoveToBoard,
   getAllLegalMoves,
   isPlayerInCheck,
   opposingSeat,
   pieceSeat,
+  toNotation,
+  updateCastlingRights,
   type Move,
 } from "./engine";
 
@@ -56,6 +66,8 @@ export const BOT_LEVELS: Record<BotLevelId, BotLevelConfig> = {
 };
 
 export const botLevelList = Object.values(BOT_LEVELS);
+
+const ANALYSIS_DEPTH = 2;
 
 const PIECE_VALUES: Record<string, number> = {
   p: 100,
@@ -182,14 +194,82 @@ function orderMoves(board: BoardState, moves: Move[]) {
   return [...moves].sort((a, b) => captureValue(board, b) - captureValue(board, a));
 }
 
+function searchMoveScore(board: BoardState, move: Move, seat: string, rights: CastlingRights) {
+  const next = applyMoveToBoard(board, move.from, move.to);
+  const nextRights = updateCastlingRights(rights, board, move.from, move.to);
+  return -negamax(next, opposingSeat(seat), ANALYSIS_DEPTH, -Infinity, Infinity, nextRights);
+}
+
+function qualityForSwing(swing: number): MoveQuality {
+  if (swing <= 20) return "best";
+  if (swing <= 80) return "good";
+  if (swing <= 180) return "inaccuracy";
+  if (swing <= 400) return "mistake";
+  return "blunder";
+}
+
+const QUALITY_LABELS: Record<MoveQuality, string> = {
+  best: "Best move",
+  good: "Good move",
+  inaccuracy: "Inaccuracy",
+  mistake: "Mistake",
+  blunder: "Blunder",
+};
+
+export function analyzePlayerMove(
+  board: BoardState,
+  from: Position,
+  to: Position,
+  seat: string,
+  rights: CastlingRights
+): MoveFeedback {
+  const legalMoves = getAllLegalMoves(board, seat, rights);
+  const scoredMoves = legalMoves.map((move) => ({
+    move,
+    score: searchMoveScore(board, move, seat, rights),
+  }));
+  const best = scoredMoves.reduce((current, candidate) =>
+    candidate.score > current.score ? candidate : current
+  );
+  const played = scoredMoves.find(
+    ({ move }) =>
+      move.from.row === from.row &&
+      move.from.col === from.col &&
+      move.to.row === to.row &&
+      move.to.col === to.col
+  ) ?? best;
+  const swing = Math.max(0, best.score - played.score);
+  const quality = qualityForSwing(swing);
+  const bestMove = toNotation(
+    best.move.from,
+    best.move.to,
+    board[best.move.from.row][best.move.from.col] as PieceSymbol,
+    !!board[best.move.to.row][best.move.to.col]
+  );
+
+  return {
+    quality,
+    label: QUALITY_LABELS[quality],
+    detail:
+      quality === "best"
+        ? "You found the strongest move in this position."
+        : quality === "good"
+          ? "This keeps the position under control."
+          : `A stronger move was ${bestMove}.`,
+    bestMove,
+    swing,
+  };
+}
+
 function negamax(
   board: BoardState,
   seat: string,
   depth: number,
   alpha: number,
-  beta: number
+  beta: number,
+  rights: CastlingRights
 ): number {
-  const moves = getAllLegalMoves(board, seat);
+  const moves = getAllLegalMoves(board, seat, rights);
 
   if (moves.length === 0) {
     if (isPlayerInCheck(board, seat)) {
@@ -208,7 +288,8 @@ function negamax(
 
   for (const move of orderMoves(board, moves)) {
     const next = applyMoveToBoard(board, move.from, move.to);
-    const score = -negamax(next, opposingSeat(seat), depth - 1, -beta, -currentAlpha);
+    const nextRights = updateCastlingRights(rights, board, move.from, move.to);
+    const score = -negamax(next, opposingSeat(seat), depth - 1, -beta, -currentAlpha, nextRights);
 
     if (score > best) {
       best = score;
@@ -231,9 +312,14 @@ function pickRandom<T>(items: T[]): T {
 }
 
 /** Chooses the bot's reply, or null when it has no legal move left. */
-export function chooseBotMove(board: BoardState, seat: string, level: BotLevelId): Move | null {
+export function chooseBotMove(
+  board: BoardState,
+  seat: string,
+  level: BotLevelId,
+  rights: CastlingRights
+): Move | null {
   const config = BOT_LEVELS[level];
-  const moves = getAllLegalMoves(board, seat);
+  const moves = getAllLegalMoves(board, seat, rights);
 
   if (moves.length === 0) {
     return null;
@@ -248,7 +334,8 @@ export function chooseBotMove(board: BoardState, seat: string, level: BotLevelId
 
   for (const move of orderMoves(board, moves)) {
     const next = applyMoveToBoard(board, move.from, move.to);
-    const score = -negamax(next, opposingSeat(seat), config.depth - 1, -Infinity, Infinity);
+    const nextRights = updateCastlingRights(rights, board, move.from, move.to);
+    const score = -negamax(next, opposingSeat(seat), config.depth - 1, -Infinity, Infinity, nextRights);
 
     if (score > bestScore) {
       bestScore = score;

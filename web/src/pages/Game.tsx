@@ -8,12 +8,24 @@ import { PlayerRow } from "@/components/game/PlayerRow";
 import { Button } from "@/components/ui/button";
 import { useGameSettings } from "@/hooks/useGameSettings";
 import { useGameState } from "@/hooks/useGameState";
+import type { ChessSeat } from "@/types/chess";
 
 export default function Game() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [resignConfirmOpen, setResignConfirmOpen] = useState(false);
+  const [boardFlipped, setBoardFlipped] = useState(false);
+  const [boardColorsSwitched, setBoardColorsSwitched] = useState(false);
   const [resultDismissed, setResultDismissed] = useState(false);
-  const { state, botThinking, selectSquare, setMode, setBotLevel, resign, resetGame, undoMove } =
+  const {
+    state,
+    botThinking,
+    selectSquare,
+    setBotLevel,
+    resign,
+    resetGame,
+    returnToBotSetup,
+    undoMove,
+  } =
     useGameState();
   const { settings, updateSetting } = useGameSettings();
   const lastMoveRef = useRef(state.lastMove);
@@ -93,10 +105,22 @@ export default function Game() {
               showCoordinates={settings.showCoordinates}
               showLegalMoves={settings.showLegalMoves}
               traceDurationMs={settings.arrowDurationMs * 1000}
+              isSetupLocked={state.modeId === "bot" && !state.botStarted}
+              isFlipped={boardFlipped}
+              areColorsSwitched={boardColorsSwitched}
               onSquareClick={selectSquare}
             />
 
-            <PlayerRow player={you} active={state.activeSeat === you.seat} />
+            <PlayerRow
+              player={you}
+              active={state.activeSeat === you.seat}
+              showActions
+              onOfferDraw={() => console.log("offer draw")}
+              onResign={() => {
+                if (settings.confirmResign) setResignConfirmOpen(true);
+                else resign();
+              }}
+            />
           </div>
         </section>
 
@@ -107,14 +131,15 @@ export default function Game() {
         settings={settings}
         settingsOpen={settingsOpen}
         onSettingsOpenChange={setSettingsOpen}
-        onModeChange={setMode}
-        onBotLevelChange={(level) => {
+        onPlayerSeatChange={(playerSeat: ChessSeat) => setBoardFlipped(playerSeat === "black")}
+        onStartBot={(level, playerSeat: ChessSeat) => {
           setResultDismissed(false);
-          setBotLevel(level);
+          setBoardFlipped(playerSeat === "black");
+          setBotLevel(level, playerSeat);
         }}
         onSettingChange={updateSetting}
-        onOfferDraw={() => console.log("offer draw")}
-        onFlipBoard={() => console.log("flip board")}
+        onFlipBoard={() => setBoardFlipped((flipped) => !flipped)}
+        onSwitchColors={() => setBoardColorsSwitched((switched) => !switched)}
         onReset={() => {
           setResultDismissed(false);
           resetGame();
@@ -122,10 +147,6 @@ export default function Game() {
         onUndo={() => {
           setResultDismissed(false);
           undoMove();
-        }}
-        onResign={() => {
-          if (settings.confirmResign) setResignConfirmOpen(true);
-          else resign();
         }}
       />
 
@@ -163,7 +184,13 @@ export default function Game() {
               >
                 Rematch
               </Button>
-              <Button className="rounded-xl" onClick={() => setResultDismissed(true)}>
+              <Button
+                className="rounded-xl"
+                onClick={() => {
+                  setResultDismissed(false);
+                  returnToBotSetup();
+                }}
+              >
                 Close
               </Button>
             </div>

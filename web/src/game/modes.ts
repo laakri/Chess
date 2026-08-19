@@ -21,6 +21,16 @@ export const GAME_MODES: Record<GameModeId, GameModeConfig> = {
     timeControl: "15+10",
     description: "A slower rated mode profile that can get its own queue and leaderboard.",
   },
+  bot: {
+    id: "bot",
+    name: "Bot Practice",
+    seats: ["white", "black"],
+    teams: ["white", "black"],
+    playerCount: 2,
+    rated: false,
+    timeControl: "10+0",
+    description: "Practice against a bot at a difficulty that suits you.",
+  },
   "coop-preview": {
     id: "coop-preview",
     name: "Co-op Preview",

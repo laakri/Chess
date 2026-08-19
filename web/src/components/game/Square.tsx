@@ -11,10 +11,12 @@ interface SquareProps {
   isLastMoveTo: boolean;
   isKingInCheck: boolean;
   isLegalTarget: boolean;
+  isCaptureTarget: boolean;
   boardTheme: BoardThemeId;
   pieceSet: PieceSetId;
   showCoordinates: boolean;
   showLegalMove: boolean;
+  isFlipped: boolean;
   onClick: (position: Position) => void;
   onContextMouseDown?: (event: React.MouseEvent<HTMLButtonElement>, position: Position) => void;
   onContextMouseEnter?: (position: Position) => void;
@@ -50,17 +52,19 @@ export function Square({
   isLastMoveTo,
   isKingInCheck,
   isLegalTarget,
+  isCaptureTarget,
   boardTheme,
   pieceSet,
   showCoordinates,
   showLegalMove,
+  isFlipped,
   onClick,
   onContextMouseDown,
   onContextMouseEnter,
   onContextMouseUp,
 }: SquareProps) {
-  const rank = 8 - position.row;
-  const file = String.fromCharCode(97 + position.col);
+  const rank = isFlipped ? position.row + 1 : 8 - position.row;
+  const file = String.fromCharCode(isFlipped ? 104 - position.col : 97 + position.col);
   const squareTheme = themeClasses[boardTheme];
   const isWhitePiece = !!piece && piece === piece.toUpperCase();
 
@@ -80,7 +84,7 @@ export function Square({
       onContextMenu={(event) => {
         event.preventDefault();
       }}
-      className={`group relative flex items-center justify-center select-none overflow-hidden text-4xl transition-all duration-200 sm:text-5xl lg:text-6xl
+      className={`group relative flex items-center justify-center select-none overflow-hidden text-4xl transition-all duration-200 sm:text-5xl lg:text-6xl ${isFlipped ? "rotate-180" : ""}
         ${isLight ? squareTheme.light : squareTheme.dark}
         ${isSelected ? "shadow-[inset_0_0_0_2px_rgba(255,255,255,0.8),inset_0_0_0_4px_rgba(59,130,246,0.9)]" : ""}
       `}
@@ -100,14 +104,33 @@ export function Square({
       {isKingInCheck && (
         <span className="absolute inset-0 animate-pulse bg-red-500/35" />
       )}
-      {showCoordinates && position.col === 0 && (
-        <span className="absolute left-2.5 top-2 z-20 text-[10px] font-semibold text-black/55">{rank}</span>
+      {showCoordinates && (!isFlipped ? position.col === 0 : position.col === 7) && (
+        <span
+          className={`absolute top-2 z-20 text-[12px] font-semibold text-black/60 ${
+            "left-2.5"
+          }`}
+        >
+          {rank}
+        </span>
       )}
-      {showCoordinates && position.row === 7 && (
-        <span className="absolute bottom-2 right-2.5 z-20 text-[10px] font-semibold text-black/55">{file}</span>
+      {showCoordinates && (!isFlipped ? position.row === 7 : position.row === 0) && (
+        <span
+          className={`absolute z-20 text-[12px] font-semibold text-black/60 ${
+            "bottom-2 right-2.5"
+          }`}
+        >
+          {file}
+        </span>
       )}
       {showLegalMove && isLegalTarget && (
-        <span className="absolute z-10 h-4 w-4 rounded-full bg-primary/45 ring-4 ring-primary/10" />
+        isCaptureTarget ? (
+          <>
+            <span className="pointer-events-none absolute inset-1 z-10 rounded-xl bg-red-500/[0.08]" />
+            <span className="pointer-events-none absolute right-2 top-2 z-30 size-2 rounded-full bg-red-500/65 shadow-[0_0_10px_rgba(239,68,68,0.55)]" />
+          </>
+        ) : (
+          <span className="absolute z-10 h-4 w-4 rounded-full bg-primary/45 ring-4 ring-primary/10" />
+        )
       )}
       {piece && (
         <div className="relative z-20 transition-transform duration-200 group-hover:scale-[1.02]">

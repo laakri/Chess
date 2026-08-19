@@ -1,9 +1,16 @@
-import type { BoardState, PieceSymbol, Position, Square } from "@/types/chess";
+import type { BoardState, CastlingRights, PieceSymbol, Position, Square } from "@/types/chess";
 
 export interface Move {
   from: Position;
   to: Position;
 }
+
+export const INITIAL_CASTLING_RIGHTS: CastlingRights = {
+  whiteKingSide: true,
+  whiteQueenSide: true,
+  blackKingSide: true,
+  blackQueenSide: true,
+};
 
 const FILES = ["a", "b", "c", "d", "e", "f", "g", "h"] as const;
 
@@ -206,10 +213,52 @@ export function applyMoveToBoard(board: BoardState, from: Position, to: Position
   const next = cloneBoard(board);
   next[to.row][to.col] = next[from.row][from.col];
   next[from.row][from.col] = "";
+
+  if (next[to.row][to.col]?.toLowerCase() === "k" && Math.abs(to.col - from.col) === 2) {
+    const rookFromCol = to.col > from.col ? 7 : 0;
+    const rookToCol = to.col > from.col ? 5 : 3;
+    next[to.row][rookToCol] = next[to.row][rookFromCol];
+    next[to.row][rookFromCol] = "";
+  }
+
   return next;
 }
 
-export function getLegalMovesForPiece(board: BoardState, from: Position): Position[] {
+export function updateCastlingRights(
+  rights: CastlingRights,
+  board: BoardState,
+  from: Position,
+  to: Position
+): CastlingRights {
+  const next = { ...rights };
+  const moving = board[from.row][from.col];
+  const captured = board[to.row][to.col];
+
+  if (moving === "K") {
+    next.whiteKingSide = false;
+    next.whiteQueenSide = false;
+  }
+  if (moving === "k") {
+    next.blackKingSide = false;
+    next.blackQueenSide = false;
+  }
+  if (moving === "R" && from.row === 7 && from.col === 7) next.whiteKingSide = false;
+  if (moving === "R" && from.row === 7 && from.col === 0) next.whiteQueenSide = false;
+  if (moving === "r" && from.row === 0 && from.col === 7) next.blackKingSide = false;
+  if (moving === "r" && from.row === 0 && from.col === 0) next.blackQueenSide = false;
+  if (captured === "R" && to.row === 7 && to.col === 7) next.whiteKingSide = false;
+  if (captured === "R" && to.row === 7 && to.col === 0) next.whiteQueenSide = false;
+  if (captured === "r" && to.row === 0 && to.col === 7) next.blackKingSide = false;
+  if (captured === "r" && to.row === 0 && to.col === 0) next.blackQueenSide = false;
+
+  return next;
+}
+
+export function getLegalMovesForPiece(
+  board: BoardState,
+  from: Position,
+  rights: CastlingRights = INITIAL_CASTLING_RIGHTS
+): Position[] {
   const piece = board[from.row][from.col];
   if (!piece) {
     return [];
@@ -217,12 +266,55 @@ export function getLegalMovesForPiece(board: BoardState, from: Position): Positi
 
   const seat = pieceSeat(piece);
 
-  return getPseudoLegalMoves(board, from).filter(
+  const legalMoves = getPseudoLegalMoves(board, from).filter(
     (to) => !isPlayerInCheck(applyMoveToBoard(board, from, to), seat)
   );
+
+  if (piece.toLowerCase() !== "k" || from.col !== 4 || (from.row !== 7 && from.row !== 0)) {
+    return legalMoves;
+  }
+
+  if (isPlayerInCheck(board, seat)) {
+    return legalMoves;
+  }
+
+  const row = from.row;
+  const opponent = opposingSeat(seat);
+  const kingSide = seat === "white" ? rights.whiteKingSide : rights.blackKingSide;
+  const queenSide = seat === "white" ? rights.whiteQueenSide : rights.blackQueenSide;
+  const rook = seat === "white" ? "R" : "r";
+
+  if (
+    kingSide &&
+    board[row][7] === rook &&
+    !board[row][5] &&
+    !board[row][6] &&
+    !isSquareAttacked(board, { row, col: 5 }, opponent) &&
+    !isSquareAttacked(board, { row, col: 6 }, opponent)
+  ) {
+    legalMoves.push({ row, col: 6 });
+  }
+
+  if (
+    queenSide &&
+    board[row][0] === rook &&
+    !board[row][1] &&
+    !board[row][2] &&
+    !board[row][3] &&
+    !isSquareAttacked(board, { row, col: 3 }, opponent) &&
+    !isSquareAttacked(board, { row, col: 2 }, opponent)
+  ) {
+    legalMoves.push({ row, col: 2 });
+  }
+
+  return legalMoves;
 }
 
-export function getAllLegalMoves(board: BoardState, seat: string): Move[] {
+export function getAllLegalMoves(
+  board: BoardState,
+  seat: string,
+  rights: CastlingRights = INITIAL_CASTLING_RIGHTS
+): Move[] {
   const moves: Move[] = [];
 
   for (let row = 0; row < board.length; row += 1) {
@@ -233,7 +325,7 @@ export function getAllLegalMoves(board: BoardState, seat: string): Move[] {
       }
 
       const from = { row, col };
-      for (const to of getLegalMovesForPiece(board, from)) {
+      for (const to of getLegalMovesForPiece(board, from, rights)) {
         moves.push({ from, to });
       }
     }
