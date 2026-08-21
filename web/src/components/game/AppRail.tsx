@@ -1,13 +1,26 @@
 import { Button } from "@/components/ui/button";
-import { Bot, Gamepad2, LogIn, Settings, Trophy, UsersRound } from "lucide-react";
+import { Bot, Gamepad2, LogIn, Settings, Shield, Timer, UsersRound } from "lucide-react";
+import { modeList } from "@/game/modes";
+import type { GameModeId } from "@/types/chess";
 import { useState } from "react";
 import whitelogo from "@/assets/logo-white.png";
 
 interface AppRailProps {
   onSettingsClick: () => void;
+  activeMode: GameModeId;
+  onModeChange: (modeId: GameModeId) => void;
 }
 
-export function AppRail({ onSettingsClick }: AppRailProps) {
+const modeIcons: Record<GameModeId, React.ReactNode> = {
+  bot: <Bot className="size-5" />,
+  "two-v-two-bot": <UsersRound className="size-5" />,
+  classic: <Gamepad2 className="size-5" />,
+  rapid: <Timer className="size-5" />,
+  "two-v-two-players": <UsersRound className="size-5" />,
+  "coop-preview": <Shield className="size-5" />,
+};
+
+export function AppRail({ onSettingsClick, activeMode, onModeChange }: AppRailProps) {
   const [joinOpen, setJoinOpen] = useState(false);
 
   return (
@@ -26,10 +39,26 @@ export function AppRail({ onSettingsClick }: AppRailProps) {
         </div>
 
         <div className="mt-3 flex flex-col gap-1">
-          <RailAction icon={<Gamepad2 className="size-5" />} label="Ranked game" />
-          <RailAction icon={<Bot className="size-5" />} label="Bot practice" />
-          <RailAction icon={<UsersRound className="size-5" />} label="Co-op mode" />
-          <RailAction icon={<Trophy className="size-5" />} label="Leaderboard" />
+          {modeList.filter((mode) => mode.available).map((mode) => (
+            <RailAction
+              key={mode.id}
+              icon={modeIcons[mode.id]}
+              label={mode.name}
+              active={activeMode === mode.id}
+              onClick={() => onModeChange(mode.id)}
+            />
+          ))}
+          <div className="mt-3 px-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35 opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100">
+            Coming soon
+          </div>
+          {modeList.filter((mode) => !mode.available).map((mode) => (
+            <RailAction
+              key={mode.id}
+              icon={modeIcons[mode.id]}
+              label={mode.name}
+              disabled
+            />
+          ))}
         </div>
 
         <div className="mt-2">
@@ -71,12 +100,32 @@ export function AppRail({ onSettingsClick }: AppRailProps) {
   );
 }
 
-function RailAction({ icon, label }: { icon: React.ReactNode; label: string }) {
+function RailAction({
+  icon,
+  label,
+  active = false,
+  disabled = false,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+}) {
   return (
     <button
       type="button"
-      className="flex h-10 w-full items-center gap-3 rounded-2xl px-2 text-left text-sm text-white/70 transition hover:bg-white/10 hover:text-white"
+      disabled={disabled}
+      className={`flex h-10 w-full items-center gap-3 rounded-2xl px-2 text-left text-sm transition ${
+        disabled
+          ? "cursor-not-allowed text-white/25"
+          : active
+            ? "bg-white/15 text-white"
+            : "text-white/70 hover:bg-white/10 hover:text-white"
+      }`}
       title={label}
+      onClick={onClick}
     >
       <span className="shrink-0">{icon}</span>
       <span className="truncate opacity-0 transition-opacity duration-200 group-hover/rail:opacity-100">

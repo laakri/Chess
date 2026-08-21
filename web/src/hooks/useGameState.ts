@@ -3,6 +3,7 @@ import { BOT_LEVELS, analyzePlayerMove, chooseBotMove } from "@/game/bot";
 import {
   INITIAL_BOARD,
   INITIAL_CASTLING_RIGHTS,
+  INITIAL_TEAM_BOARD,
   applyMoveToBoard,
   cloneBoard,
   getAllLegalMoves,
@@ -22,6 +23,7 @@ import type {
   GameState,
   PieceSymbol,
   Position,
+  TeamTurnId,
 } from "@/types/chess";
 
 const BOT_RATINGS: Record<BotLevelId, number> = {
@@ -51,6 +53,16 @@ function formatClockFromSeconds(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
+const TEAM_TURN_ORDER: TeamTurnId[] = ["P1", "P3", "P2", "P4"];
+
+function nextTeamTurn(slot: TeamTurnId): TeamTurnId {
+  return TEAM_TURN_ORDER[(TEAM_TURN_ORDER.indexOf(slot) + 1) % TEAM_TURN_ORDER.length];
+}
+
+function seatForTeamTurn(slot: TeamTurnId): ChessSeat {
+  return slot === "P1" || slot === "P2" ? "white" : "black";
+}
+
 function applyMove(state: GameState, from: Position, to: Position): GameState {
   const moving = state.board[from.row][from.col] as PieceSymbol;
   const captured = state.board[to.row][to.col] as PieceSymbol | "";
@@ -71,7 +83,8 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
     }
   }
 
-  const nextSeat = opposingSeat(state.activeSeat);
+  const nextTurnSlot = state.modeId === "two-v-two-bot" ? nextTeamTurn(state.turnSlot) : null;
+  const nextSeat = nextTurnSlot ? seatForTeamTurn(nextTurnSlot) : opposingSeat(state.activeSeat);
   const isOpponentInCheck = isPlayerInCheck(board, nextSeat);
   const opponentHasMoves = getAllLegalMoves(board, nextSeat, castlingRights).length > 0;
 
@@ -79,6 +92,7 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
     ...state,
     board,
     activeSeat: nextSeat,
+    turnSlot: nextTurnSlot ?? state.turnSlot,
     selectedSquare: null,
     legalTargets: [],
     lastMove: { from, to },
@@ -99,34 +113,48 @@ function applyMove(state: GameState, from: Position, to: Position): GameState {
   };
 }
 
-function createInitialState(botLevel: BotLevelId, playerSeat: ChessSeat = "white"): GameState {
+function createInitialState(
+  botLevel: BotLevelId,
+  playerSeat: ChessSeat = "white",
+  modeId: GameModeId = "bot"
+): GameState {
   const botSeat = opposingSeat(playerSeat);
+  const isTeamMode = modeId === "two-v-two-bot";
 
   return {
-    modeId: "bot",
-    board: cloneBoard(INITIAL_BOARD),
+    modeId,
+    board: cloneBoard(isTeamMode ? INITIAL_TEAM_BOARD : INITIAL_BOARD),
+    boardWidth: isTeamMode ? 10 : 8,
 
-    players: [
-      {
-        id: "bot",
-        name: `${BOT_LEVELS[botLevel].name} bot`,
-        rating: BOT_RATINGS[botLevel],
-        clock: "10:00",
-        seat: botSeat,
-        team: botSeat,
-      },
-      {
-        id: "you",
-        name: "You",
-        rating: 1204,
-        clock: "10:00",
-        seat: playerSeat,
-        team: playerSeat,
-        isYou: true,
-      },
-    ],
+    players: isTeamMode
+      ? [
+          { id: "p1", name: "Player 1", rating: 1204, clock: "10:00", seat: "white", team: "white", isYou: true },
+          { id: "p3", name: "Bot Alpha", rating: BOT_RATINGS[botLevel], clock: "10:00", seat: "black", team: "black" },
+          { id: "p2", name: "Player 2", rating: 1204, clock: "10:00", seat: "white", team: "white", isYou: true },
+          { id: "p4", name: "Bot Beta", rating: BOT_RATINGS[botLevel], clock: "10:00", seat: "black", team: "black" },
+        ]
+      : [
+          {
+            id: "bot",
+            name: `${BOT_LEVELS[botLevel].name} bot`,
+            rating: BOT_RATINGS[botLevel],
+            clock: "10:00",
+            seat: botSeat,
+            team: botSeat,
+          },
+          {
+            id: "you",
+            name: "Player 1",
+            rating: 1204,
+            clock: "10:00",
+            seat: playerSeat,
+            team: playerSeat,
+            isYou: true,
+          },
+        ],
 
     activeSeat: "white",
+    turnSlot: "P1",
 
     selectedSquare: null,
     legalTargets: [],
@@ -157,7 +185,9 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
   const botTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (state.status !== "ongoing" || (state.modeId === "bot" && !state.botStarted)) {
+    const isBotMode = state.modeId === "bot" || state.modeId === "two-v-two-bot";
+
+    if (state.status !== "ongoing" || isBotMode) {
       return undefined;
     }
 
@@ -205,19 +235,20 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
 
   useEffect(() => {
     const botSeat = opposingSeat(state.playerSeat);
+    const isTeamBotTurn = state.modeId === "two-v-two-bot" && (state.turnSlot === "P3" || state.turnSlot === "P4");
 
-    if (state.status !== "ongoing" || state.activeSeat !== botSeat) {
+    if (state.status !== "ongoing" || (state.modeId === "two-v-two-bot" ? !isTeamBotTurn : state.activeSeat !== botSeat)) {
       return undefined;
     }
 
     botTimerRef.current = window.setTimeout(() => {
       setState((prev) => {
         const botSeat = opposingSeat(prev.playerSeat);
-        if (prev.status !== "ongoing" || prev.activeSeat !== botSeat) {
+        if (prev.status !== "ongoing" || (prev.modeId === "two-v-two-bot" ? !(prev.turnSlot === "P3" || prev.turnSlot === "P4") : prev.activeSeat !== botSeat)) {
           return prev;
         }
 
-        const move = chooseBotMove(prev.board, botSeat, prev.botLevel, prev.castlingRights);
+        const move = chooseBotMove(prev.board, prev.activeSeat, prev.botLevel, prev.castlingRights);
 
         if (!move) {
           return {
@@ -246,7 +277,10 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
 
       const botSeat = opposingSeat(prev.playerSeat);
 
-      if (prev.activeSeat !== prev.playerSeat) {
+      const isHumanTurn = prev.modeId === "two-v-two-bot"
+        ? prev.turnSlot === "P1" || prev.turnSlot === "P2"
+        : prev.activeSeat === prev.playerSeat;
+      if (!isHumanTurn) {
         const bot = prev.players.find((player) => player.seat === botSeat);
         return { ...prev, hint: `Wait for ${bot?.name ?? "the bot"} to move` };
       }
@@ -332,16 +366,13 @@ export function useGameState(initialBotLevel: BotLevelId = "casual") {
   }, []);
 
   const setMode = useCallback((modeId: GameModeId) => {
-    setState((prev) => ({
-      ...prev,
-      modeId,
-      botStarted: modeId === "bot" ? false : prev.botStarted,
-    }));
+    setHistory([]);
+    setState((prev) => ({ ...createInitialState(prev.botLevel, prev.playerSeat, modeId), botStarted: modeId !== "bot" && modeId !== "two-v-two-bot" }));
   }, []);
 
   const setBotLevel = useCallback((botLevel: BotLevelId, playerSeat: ChessSeat) => {
     setHistory([]);
-    setState({ ...createInitialState(botLevel, playerSeat), botStarted: true });
+    setState((prev) => ({ ...createInitialState(botLevel, playerSeat, prev.modeId), botStarted: true }));
   }, []);
 
   const resign = useCallback(() => {

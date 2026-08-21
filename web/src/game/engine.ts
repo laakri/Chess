@@ -26,12 +26,23 @@ export const INITIAL_BOARD: BoardState = [
   ["R", "N", "B", "Q", "K", "B", "N", "R"],
 ];
 
+export const INITIAL_TEAM_BOARD: BoardState = [
+  ["r", "n", "b", "q", "k", "k", "q", "b", "n", "r"],
+  ["p", "p", "p", "p", "p", "p", "p", "p", "p", "p"],
+  ["", "", "", "", "", "", "", "", "", ""],
+  ["", "", "", "", "", "", "", "", "", ""],
+  ["", "", "", "", "", "", "", "", "", ""],
+  ["", "", "", "", "", "", "", "", "", ""],
+  ["P", "P", "P", "P", "P", "P", "P", "P", "P", "P"],
+  ["R", "N", "B", "Q", "K", "K", "Q", "B", "N", "R"],
+];
+
 export function cloneBoard(board: BoardState): BoardState {
   return board.map((row) => [...row]);
 }
 
-export function inBounds(position: Position) {
-  return position.row >= 0 && position.row < 8 && position.col >= 0 && position.col < 8;
+export function inBounds(position: Position, width = 8) {
+  return position.row >= 0 && position.row < 8 && position.col >= 0 && position.col < width;
 }
 
 export function isWhite(piece: Square) {
@@ -71,7 +82,7 @@ function rayMoves(board: BoardState, from: Position, seat: string, directions: P
   for (const direction of directions) {
     let next = { row: from.row + direction.row, col: from.col + direction.col };
 
-    while (inBounds(next)) {
+    while (inBounds(next, board[0]?.length ?? 8)) {
       const target = board[next.row][next.col];
 
       if (!target) {
@@ -120,13 +131,13 @@ export function pawnDirection(seat: string) {
 }
 
 /** Squares a pawn threatens — diagonals only, unlike its forward pushes. */
-export function getPawnAttackSquares(from: Position, seat: string) {
+export function getPawnAttackSquares(from: Position, seat: string, width = 8) {
   const direction = pawnDirection(seat);
 
   return [
     { row: from.row + direction, col: from.col - 1 },
     { row: from.row + direction, col: from.col + 1 },
-  ].filter(inBounds);
+  ].filter((position) => inBounds(position, width));
 }
 
 export function getPseudoLegalMoves(board: BoardState, from: Position): Position[] {
@@ -138,7 +149,7 @@ export function getPseudoLegalMoves(board: BoardState, from: Position): Position
 
   if (type === "n") {
     return KNIGHT_JUMPS.map(([row, col]) => ({ row: from.row + row, col: from.col + col })).filter(
-      (position) => inBounds(position) && pieceSeat(board[position.row][position.col]) !== seat
+      (position) => inBounds(position, board[0]?.length ?? 8) && pieceSeat(board[position.row][position.col]) !== seat
     );
   }
 
@@ -148,7 +159,7 @@ export function getPseudoLegalMoves(board: BoardState, from: Position): Position
 
   if (type === "k") {
     return KING_STEPS.map(([row, col]) => ({ row: from.row + row, col: from.col + col })).filter(
-      (position) => inBounds(position) && pieceSeat(board[position.row][position.col]) !== seat
+      (position) => inBounds(position, board[0]?.length ?? 8) && pieceSeat(board[position.row][position.col]) !== seat
     );
   }
 
@@ -159,15 +170,15 @@ export function getPseudoLegalMoves(board: BoardState, from: Position): Position
   const one = { row: from.row + direction, col: from.col };
   const two = { row: from.row + direction * 2, col: from.col };
 
-  if (inBounds(one) && !board[one.row][one.col]) {
+  if (inBounds(one, board[0]?.length ?? 8) && !board[one.row][one.col]) {
     moves.push(one);
 
-    if (from.row === startRow && inBounds(two) && !board[two.row][two.col]) {
+    if (from.row === startRow && inBounds(two, board[0]?.length ?? 8) && !board[two.row][two.col]) {
       moves.push(two);
     }
   }
 
-  for (const capture of getPawnAttackSquares(from, seat)) {
+  for (const capture of getPawnAttackSquares(from, seat, board[0]?.length ?? 8)) {
     const target = board[capture.row][capture.col];
     if (target && pieceSeat(target) !== seat) {
       moves.push(capture);
@@ -188,7 +199,7 @@ export function isSquareAttacked(board: BoardState, target: Position, bySeat: st
       const from = { row, col };
       const attacks =
         piece.toLowerCase() === "p"
-          ? getPawnAttackSquares(from, bySeat)
+          ? getPawnAttackSquares(from, bySeat, board[0]?.length ?? 8)
           : getPseudoLegalMoves(board, from);
 
       if (attacks.some((attack) => samePosition(attack, target))) {

@@ -49,7 +49,8 @@ export function GameSidebar({
   const mode = GAME_MODES[state.modeId];
   const [selectedBotLevel, setSelectedBotLevel] = useState<BotLevelId>(state.botLevel);
   const [selectedPlayerSeat, setSelectedPlayerSeat] = useState<ChessSeat>("white");
-  const activePlayer = state.players.find((player) => player.seat === state.activeSeat);
+  const activePlayer = state.players.find((player) => player.id === state.turnSlot.toLowerCase())
+    ?? state.players.find((player) => player.seat === state.activeSeat);
   const turnLabel = botThinking
     ? `${activePlayer?.name ?? "Bot"} is thinking…`
     : `Turn: ${activePlayer?.name ?? state.activeSeat}`;
@@ -79,7 +80,7 @@ export function GameSidebar({
         </div>
       ) : (
         <>
-          {state.modeId === "bot" && !state.botStarted ? (
+          {(state.modeId === "bot" || state.modeId === "two-v-two-bot") && !state.botStarted ? (
             <div className="flex min-h-0 flex-1 flex-col">
               <div className="mb-5">
                 <div className="mb-1 text-lg font-semibold">Play against a bot</div>
@@ -151,13 +152,15 @@ export function GameSidebar({
             </div>
           )}
 
-          <div className="mb-3 flex items-center gap-2 rounded-3xl bg-foreground/[0.04] px-3 py-2">
-            <Timer className="size-4 text-muted-foreground" />
-            <div className="min-w-0">
-              <div className="text-xs text-muted-foreground">Time control</div>
-              <div className="text-sm font-medium">{mode.timeControl}</div>
+          {state.modeId !== "bot" && state.modeId !== "two-v-two-bot" && (
+            <div className="mb-3 flex items-center gap-2 rounded-3xl bg-foreground/[0.04] px-3 py-2">
+              <Timer className="size-4 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">Time control</div>
+                <div className="text-sm font-medium">{mode.timeControl}</div>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="mb-3 grid grid-cols-2 gap-1">
             <ActionButton icon={<Repeat2 className="size-4" />} label="Flip" onClick={onFlipBoard} />

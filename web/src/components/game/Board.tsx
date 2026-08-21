@@ -17,6 +17,7 @@ interface BoardProps {
   isSetupLocked: boolean;
   isFlipped: boolean;
   areColorsSwitched: boolean;
+  isTeamBoard: boolean;
   onSquareClick: (position: Position) => void;
 }
 
@@ -66,6 +67,7 @@ export function Board({
   isSetupLocked,
   isFlipped,
   areColorsSwitched,
+  isTeamBoard,
   onSquareClick,
 }: BoardProps) {
   const isSamePos = (a: Position | null, b: Position) =>
@@ -133,12 +135,27 @@ export function Board({
     };
   }, []);
 
+  const boardWidth = board[0]?.length ?? 8;
   const activeKingPosition = board.reduce<Position | null>((found, row, rowIndex) => {
     if (found) return found;
 
     const colIndex = row.findIndex((piece) => piece === (activeSeat === "white" ? "K" : "k"));
     return colIndex >= 0 ? { row: rowIndex, col: colIndex } : null;
   }, null);
+  const linkedKings = isTeamBoard
+    ? {
+        white: board.flatMap((row, rowIndex) =>
+          row.flatMap((piece, colIndex) =>
+            piece === "K" ? [{ row: rowIndex, col: colIndex }] : []
+          )
+        ),
+        black: board.flatMap((row, rowIndex) =>
+          row.flatMap((piece, colIndex) =>
+            piece === "k" ? [{ row: rowIndex, col: colIndex }] : []
+          )
+        ),
+      }
+    : { white: [], black: [] };
   const isActiveKingInCheck = isPlayerInCheck(board, activeSeat);
 
   const renderTrace = (trace: Trace) => {
@@ -205,20 +222,37 @@ export function Board({
 
   return (
     <div
-      className={`relative grid aspect-square grid-cols-8 grid-rows-8 ${boardSizeClasses[boardSize]} overflow-hidden rounded-[28px] shadow-2xl shadow-black/10 transition-[filter,opacity,transform] duration-300 ${isFlipped ? "rotate-180" : ""} ${isSetupLocked ? "pointer-events-none blur-[5px] opacity-65" : ""}`}
+      className={`relative grid aspect-[5/4] grid-rows-8 ${boardSizeClasses[boardSize]} overflow-hidden rounded-[28px] shadow-2xl shadow-black/10 transition-[filter,opacity,transform] duration-300 ${isFlipped ? "rotate-180" : ""} ${isSetupLocked ? "pointer-events-none blur-[5px] opacity-65" : ""}`}
+      style={{ gridTemplateColumns: `repeat(${boardWidth}, minmax(0, 1fr))` }}
       onContextMenu={(event) => event.preventDefault()}
       onMouseUp={endTrace}
     >
       {traces.length > 0 && (
         <svg
           className="pointer-events-none absolute inset-0 z-30 h-full w-full"
-          viewBox={`0 0 ${CELL * 8} ${CELL * 8}`}
+          viewBox={`0 0 ${CELL * boardWidth} ${CELL * 8}`}
         >
           <defs>
             <filter id={shadowId} x="-20%" y="-20%" width="140%" height="140%">
               <feDropShadow dx="0" dy="1.5" stdDeviation="1.6" floodColor="#000000" floodOpacity="0.35" />
             </filter>
           </defs>
+          {isTeamBoard && [linkedKings.white, linkedKings.black].map((kings, index) =>
+            kings.length === 2 ? (
+              <line
+                key={index}
+                x1={(kings[0].col + 0.5) * CELL}
+                y1={(kings[0].row + 0.5) * CELL}
+                x2={(kings[1].col + 0.5) * CELL}
+                y2={(kings[1].row + 0.5) * CELL}
+                stroke={index === 0 ? "#f59e0b" : "#60a5fa"}
+                strokeWidth="7"
+                strokeDasharray="12 8"
+                strokeLinecap="round"
+                opacity="0.75"
+              />
+            ) : null
+          )}
           {traces.map((trace) => renderTrace(trace))}
         </svg>
       )}

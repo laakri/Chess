@@ -44,10 +44,12 @@ export interface MoveFeedback {
   swing: number;
 }
 
-export type GameModeId = "classic" | "rapid" | "bot" | "coop-preview";
+export type GameModeId = "classic" | "rapid" | "bot" | "two-v-two-bot" | "two-v-two-players" | "coop-preview";
 
 export type BotLevelId = "beginner" | "casual" | "club" | "expert";
 export type ChessSeat = "white" | "black";
+export type TeamTurnId = "P1" | "P3" | "P2" | "P4";
+export type GameModeCategory = "practice" | "ranked" | "team" | "social";
 
 export interface GameModeConfig {
   id: GameModeId;
@@ -58,6 +60,9 @@ export interface GameModeConfig {
   rated: boolean;
   timeControl: string;
   description: string;
+  category: GameModeCategory;
+  format: string;
+  available: boolean;
 }
 
 export type BoardThemeId = "walnut" | "tournament" | "midnight" | "graphite";
@@ -82,9 +87,11 @@ export interface GameSettings {
 export interface GameState {
   modeId: GameModeId;
   board: BoardState;
+  boardWidth: number;
   players: PlayerInfo[];
   /** Whose seat acts right now. Classic chess uses "white" and "black". */
   activeSeat: string;
+  turnSlot: TeamTurnId;
   selectedSquare: Position | null;
   legalTargets: Position[];
   lastMove: { from: Position; to: Position } | null;

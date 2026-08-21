@@ -20,6 +20,7 @@ export default function Game() {
     state,
     botThinking,
     selectSquare,
+    setMode,
     setBotLevel,
     resign,
     resetGame,
@@ -31,6 +32,15 @@ export default function Game() {
   const lastMoveRef = useRef(state.lastMove);
   const opponent = state.players.find((player) => !player.isYou) ?? state.players[0];
   const you = state.players.find((player) => player.isYou) ?? state.players[state.players.length - 1];
+  const isTeamGame = state.modeId === "two-v-two-bot";
+  const showClock = state.modeId !== "bot" && state.modeId !== "two-v-two-bot";
+  const isBotGame = state.modeId === "bot" || state.modeId === "two-v-two-bot";
+  const teamAPlayers = state.players.filter((player) => player.team === "white");
+  const teamBPlayers = state.players.filter((player) => player.team === "black");
+  const isActivePlayer = (player: typeof state.players[number]) =>
+    isTeamGame
+      ? player.id === state.turnSlot.toLowerCase()
+      : state.activeSeat === player.seat;
 
   const isWinState =
     state.status === "checkmate" ||
@@ -84,15 +94,38 @@ export default function Game() {
   return (
     <>
       <main className="flex h-screen overflow-hidden bg-background text-foreground">
-        <AppRail onSettingsClick={() => setSettingsOpen((open) => !open)} />
+        <AppRail
+          onSettingsClick={() => setSettingsOpen((open) => !open)}
+          activeMode={state.modeId}
+          onModeChange={setMode}
+        />
 
         <section className="flex min-w-0 flex-1 items-center justify-center px-3 py-2">
           <div className="flex min-h-0 w-full max-w-[900px] flex-col items-center gap-1.5">
-            <PlayerRow
-              player={opponent}
-              active={state.activeSeat === opponent.seat}
-              thinking={botThinking}
-            />
+            {isTeamGame ? (
+              <div className="grid w-full grid-cols-2 gap-1">
+                {teamBPlayers.map((player) => (
+                  <PlayerRow
+                    key={player.id}
+                    player={player}
+                    active={isActivePlayer(player)}
+                    thinking={botThinking && isActivePlayer(player)}
+                    showClock={showClock}
+                    showRating={!isBotGame}
+                    botLevel={isBotGame && !player.isYou ? `${state.botLevel} bot` : undefined}
+                  />
+                ))}
+              </div>
+            ) : (
+              <PlayerRow
+                player={opponent}
+                active={isActivePlayer(opponent)}
+                thinking={botThinking}
+                showClock={showClock}
+                showRating={!isBotGame}
+                botLevel={isBotGame ? `${state.botLevel} bot` : undefined}
+              />
+            )}
 
             <Board
               board={state.board}
@@ -105,22 +138,45 @@ export default function Game() {
               showCoordinates={settings.showCoordinates}
               showLegalMoves={settings.showLegalMoves}
               traceDurationMs={settings.arrowDurationMs * 1000}
-              isSetupLocked={state.modeId === "bot" && !state.botStarted}
+              isSetupLocked={(state.modeId === "bot" || state.modeId === "two-v-two-bot") && !state.botStarted}
+              isTeamBoard={state.modeId === "two-v-two-bot"}
               isFlipped={boardFlipped}
               areColorsSwitched={boardColorsSwitched}
               onSquareClick={selectSquare}
             />
 
-            <PlayerRow
-              player={you}
-              active={state.activeSeat === you.seat}
-              showActions
-              onOfferDraw={() => console.log("offer draw")}
-              onResign={() => {
-                if (settings.confirmResign) setResignConfirmOpen(true);
-                else resign();
-              }}
-            />
+            {isTeamGame ? (
+              <div className="grid w-full grid-cols-2 gap-1">
+                {teamAPlayers.map((player, index) => (
+                  <PlayerRow
+                    key={player.id}
+                    player={player}
+                    active={isActivePlayer(player)}
+                    showClock={showClock}
+                    showRating={!isBotGame}
+                    showActions={index === teamAPlayers.length - 1}
+                    onOfferDraw={() => console.log("offer draw")}
+                    onResign={() => {
+                      if (settings.confirmResign) setResignConfirmOpen(true);
+                      else resign();
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <PlayerRow
+                player={you}
+                active={isActivePlayer(you)}
+                showClock={showClock}
+                showRating={!isBotGame}
+                showActions
+                onOfferDraw={() => console.log("offer draw")}
+                onResign={() => {
+                  if (settings.confirmResign) setResignConfirmOpen(true);
+                  else resign();
+                }}
+              />
+            )}
           </div>
         </section>
 

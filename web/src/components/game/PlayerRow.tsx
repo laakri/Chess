@@ -5,6 +5,9 @@ interface PlayerRowProps {
   player: PlayerInfo;
   active: boolean;
   thinking?: boolean;
+  showClock?: boolean;
+  showRating?: boolean;
+  botLevel?: string;
   showActions?: boolean;
   onOfferDraw?: () => void;
   onResign?: () => void;
@@ -29,6 +32,9 @@ export function PlayerRow({
   player,
   active,
   thinking = false,
+  showClock = true,
+  showRating = true,
+  botLevel,
   showActions = false,
   onOfferDraw,
   onResign,
@@ -86,8 +92,12 @@ export function PlayerRow({
               active ? "text-white/50" : "text-muted-foreground"
             }`}
           >
-            <span className="font-mono tabular-nums">{player.rating}</span>
-            <span className="opacity-50">·</span>
+            {botLevel ? (
+              <span>{botLevel}</span>
+            ) : showRating ? (
+              <span className="font-mono tabular-nums">{player.rating}</span>
+            ) : null}
+            {(botLevel || showRating) && <span className="opacity-50">·</span>}
             <span>{thinking ? "thinking…" : player.seat}</span>
           </div>
         </div>
@@ -116,7 +126,7 @@ export function PlayerRow({
             </button>
           </div>
         )}
-        <div
+        {showClock && <div
           className={`flex h-8 items-center gap-1.5 rounded-xl px-2.5 font-mono text-sm font-semibold tabular-nums transition-colors ${
           isCritical
             ? "bg-red-500/15 text-red-500"
@@ -129,7 +139,7 @@ export function PlayerRow({
         >
           <Timer className={`size-3.5 ${isCritical && active ? "animate-pulse" : ""}`} />
           {player.clock}
-        </div>
+        </div>}
       </div>
     </div>
   );
